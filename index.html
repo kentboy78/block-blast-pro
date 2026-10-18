@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Block Blast+ Pro</title>
+
+  <!-- iOS Web App / Home Screen Shortcut Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Block Blast+" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Block Blast+ Pro — Ad-free iPhone puzzle game with smart block deals, line-clear previews, hold vault, and tactical power-ups." />
+
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="icon" type="image/png" sizes="180x180" href="icon-180.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell" id="app-shell">
+    <!-- Top iOS Bar: Crown High Score, Mode Badge, Sound & iPhone Install Shortcut -->
+    <header class="top-bar" aria-label="Game controls and status">
+      <div class="best-badge" title="All-Time High Score">
+        <span class="crown-icon" aria-hidden="true">👑</span>
+        <div class="best-meta">
+          <span class="best-label">BEST</span>
+          <span class="best-value" id="best-score">0</span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="mode-pill"
+        commandfor="mode-dialog"
+        command="show-modal"
+        id="mode-pill-btn"
+        aria-label="Change game mode"
+      >
+        <span class="mode-dot" id="mode-dot"></span>
+        <span id="current-mode-label">Classic Pro</span>
+        <span class="chevron" aria-hidden="true">▾</span>
+      </button>
+
+      <div class="top-actions">
+        <button
+          type="button"
+          class="icon-btn"
+          id="sound-toggle-btn"
+          aria-label="Toggle sound effects"
+          aria-pressed="true"
+          title="Toggle Sound & Haptics"
+        >
+          <span id="sound-icon" aria-hidden="true">🔊</span>
+        </button>
+        <button
+          type="button"
+          class="icon-btn install-trigger-btn"
+          commandfor="ios-install-dialog"
+          command="show-modal"
+          aria-label="How to add iPhone Home Screen shortcut"
+          title="iPhone App Shortcut Guide"
+        >
+          <span aria-hidden="true">📲</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Score & Combo HUD -->
+    <section class="score-stage" aria-live="polite">
+      <div class="score-main-wrap">
+        <div class="current-score" id="current-score">0</div>
+        <div class="sub-status-row">
+          <div class="combo-pill" id="combo-pill" hidden>
+            <span class="fire-icon" aria-hidden="true">🔥</span>
+            <span id="combo-text">COMBO ×2</span>
+          </div>
+          <div class="gem-counter-pill" id="gem-pill" hidden>
+            <span aria-hidden="true">💎</span>
+            <span id="gem-text">0 / 12 Gems</span>
+          </div>
+          <div class="mercy-indicator" id="mercy-indicator" title="Smart Fair-Deal Active: Guarantees solvable trays whenever possible">
+            ✨ Smart Deal
+          </div>
+        </div>
+      </div>
+
+      <!-- Keyboard / A11y Placement Bar (shown when navigating via keyboard) -->
+      <div class="kbd-hint-bar" id="kbd-hint-bar" hidden>
+        <span id="kbd-hint-text">Arrow keys: move target • R: rotate • Enter/Space: place • Esc: cancel</span>
+      </div>
+    </section>
+
+    <!-- 8x8 Interactive Board Stage -->
+    <main class="board-stage" id="board-stage">
+      <div class="board-frame" id="board-frame">
+        <div
+          class="board-grid"
+          id="board-grid"
+          role="grid"
+          aria-label="8 by 8 Block Blast game board"
+        ></div>
+        <canvas class="fx-canvas" id="fx-canvas" aria-hidden="true"></canvas>
+        <div class="floating-banners" id="floating-banners" aria-hidden="true"></div>
+      </div>
+    </main>
+
+    <!-- Tactical Power-Up Bar (Earned via Combos & Clears - Zero Ads/IAP) -->
+    <section class="powerup-bar" id="powerup-bar" aria-label="Tactical power-ups">
+      <div class="charge-meter-wrap" title="Clear lines and build combos to earn power-up charges">
+        <div class="charge-label">
+          <span>⚡ ENERGY</span>
+          <span id="energy-count">2 / 5</span>
+        </div>
+        <div class="charge-track">
+          <div class="charge-fill" id="energy-fill" style="width: 40%"></div>
+        </div>
+      </div>
+
+      <div class="powerup-buttons">
+        <button
+          type="button"
+          class="power-btn"
+          id="btn-rotate"
+          aria-label="Rotate tray pieces 90 degrees (Costs 1 Energy)"
+        >
+          <span class="power-icon" aria-hidden="true">↻</span>
+          <span class="power-name">Rotate</span>
+          <span class="power-cost">1⚡</span>
+        </button>
+
+        <button
+          type="button"
+          class="power-btn"
+          id="btn-bomb"
+          aria-label="Blast a 3 by 3 area on the board (Costs 2 Energy)"
+        >
+          <span class="power-icon" aria-hidden="true">💣</span>
+          <span class="power-name">Blast</span>
+          <span class="power-cost">2⚡</span>
+        </button>
+
+        <button
+          type="button"
+          class="power-btn"
+          id="btn-reroll"
+          aria-label="Deal 3 fresh solvable pieces (Costs 2 Energy)"
+        >
+          <span class="power-icon" aria-hidden="true">🎲</span>
+          <span class="power-name">Refill</span>
+          <span class="power-cost">2⚡</span>
+        </button>
+
+        <button
+          type="button"
+          class="power-btn"
+          id="btn-undo"
+          aria-label="Undo last move (Free once per tray)"
+          disabled
+        >
+          <span class="power-icon" aria-hidden="true">↩️</span>
+          <span class="power-name">Undo</span>
+          <span class="power-cost" id="undo-badge">Ready</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Bottom Piece Dock + Hold Vault -->
+    <section class="dock-stage" aria-label="Available block pieces and hold vault">
+      <div class="piece-tray" id="piece-tray">
+        <div class="tray-slot" data-slot="0">
+          <div
+            class="piece-card drag-handle"
+            id="piece-slot-0"
+            data-slot="0"
+            tabindex="0"
+            aria-label="Tray piece 1. Drag onto board or press Enter then use Arrow keys and Enter to place."
+          ></div>
+        </div>
+        <div class="tray-slot" data-slot="1">
+          <div
+            class="piece-card drag-handle"
+            id="piece-slot-1"
+            data-slot="1"
+            tabindex="0"
+            aria-label="Tray piece 2. Drag onto board or press Enter then use Arrow keys and Enter to place."
+          ></div>
+        </div>
+        <div class="tray-slot" data-slot="2">
+          <div
+            class="piece-card drag-handle"
+            id="piece-slot-2"
+            data-slot="2"
+            tabindex="0"
+            aria-label="Tray piece 3. Drag onto board or press Enter then use Arrow keys and Enter to place."
+          ></div>
+        </div>
+      </div>
+
+      <!-- Hold Vault Slot (Unique Upgrade over standard Block Blast) -->
+      <div class="hold-vault" id="hold-vault" aria-label="Hold Vault: Drag a piece here to save it for later">
+        <div class="vault-header">HOLD</div>
+        <div class="vault-slot" id="vault-slot">
+          <div
+            class="piece-card drag-handle"
+            id="piece-slot-hold"
+            data-slot="hold"
+            tabindex="0"
+            aria-label="Held piece in vault. Drag onto board or press Enter then use Arrow keys to place."
+            hidden
+          ></div>
+          <span class="vault-placeholder" id="vault-placeholder">Drop to Save</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Floating Drag Proxy Element (follows finger with iPhone thumb-clearance offset) -->
+  <div class="floating-drag-piece" id="floating-drag-piece" aria-hidden="true" hidden></div>
+
+  <!-- Game Mode & New Game Dialog -->
+  <dialog id="mode-dialog" class="app-dialog" aria-labelledby="mode-dialog-title">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <h2 id="mode-dialog-title">Game Modes & Options</h2>
+        <button type="button" class="close-pill-btn" commandfor="mode-dialog" command="close" aria-label="Close dialog">✕</button>
+      </div>
+
+      <div class="mode-list">
+        <button type="button" class="mode-option-card active" data-mode="pro">
+          <div class="mode-option-icon">⚡</div>
+          <div class="mode-option-info">
+            <h3>Classic Pro (Recommended)</h3>
+            <p>Smart Fair-Deal generator prevents impossible RNG deaths + Hold Vault, Rotate, Blast Bomb & Undo earned via combos.</p>
+          </div>
+        </button>
+
+        <button type="button" class="mode-option-card" data-mode="gem">
+          <div class="mode-option-icon">💎</div>
+          <div class="mode-option-info">
+            <h3>Crystal Gem Rush</h3>
+            <p>Embedded crystal gems spawn inside blocks. Clear rows & columns containing 12 gems to win the stage with bonus multipliers!</p>
+          </div>
+        </button>
+
+        <button type="button" class="mode-option-card" data-mode="pure">
+          <div class="mode-option-icon">🧱</div>
+          <div class="mode-option-info">
+            <h3>Pure Classic</h3>
+            <p>Strict traditional rules — no power-ups or hold vault, pure 8×8 spatial endurance with line-clear previews.</p>
+          </div>
+        </button>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="secondary-action-btn" id="restart-current-btn">🔄 Restart Current Game</button>
+        <button type="button" class="primary-action-btn" commandfor="mode-dialog" command="close">Resume</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- iPhone Home Screen Shortcut Guide Dialog -->
+  <dialog id="ios-install-dialog" class="app-dialog" aria-labelledby="ios-dialog-title">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <h2 id="ios-dialog-title">📲 Use as an iPhone App</h2>
+        <button type="button" class="close-pill-btn" commandfor="ios-install-dialog" command="close" aria-label="Close dialog">✕</button>
+      </div>
+
+      <p class="dialog-lead">
+        This game is built as a full-screen <strong>iOS Standalone Web App</strong>. Adding a shortcut to your iPhone Home Screen hides Safari’s address bar, enables offline play, and gives it a native app icon!
+      </p>
+
+      <ol class="ios-steps-list">
+        <li>
+          <span class="step-num">1</span>
+          <div>
+            <strong>Open in Safari on your iPhone</strong>
+            <p>Access this game via your local network URL or hosted link in iOS Safari.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <div>
+            <strong>Tap the Share button <span class="inline-badge">⬆️</span></strong>
+            <p>Located at the bottom center of Safari's toolbar.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <div>
+            <strong>Tap “Add to Home Screen” <span class="inline-badge">➕</span></strong>
+            <p>Confirm the name <strong>Block Blast+</strong> and tap <strong>Add</strong>. Launch it from your Home Screen just like a native iOS app!</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="what-is-better-box">
+        <h3>✨ Why Block Blast+ Pro is Better</h3>
+        <ul>
+          <li><strong>Zero Ads, Ever:</strong> Instant restarts, no 30-second video interruptions.</li>
+          <li><strong>Line-Clear Glow Preview:</strong> Rows & columns pulse gold <em>before</em> you drop a piece so you never misjudge a clear.</li>
+          <li><strong>Smart Fair-Deal RNG:</strong> Checks board solvability so you aren't ended by impossible 3×3 deals.</li>
+          <li><strong>Hold Vault & Tactical Power-Ups:</strong> Save a piece for later, rotate pieces, undo fat-finger drops, or blast a 3×3 zone.</li>
+        </ul>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="primary-action-btn" commandfor="ios-install-dialog" command="close">Got It, Let’s Play!</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Game Over / Stage Clear Dialog -->
+  <dialog id="gameover-dialog" class="app-dialog" aria-labelledby="gameover-title">
+    <div class="dialog-card gameover-card">
+      <div class="gameover-badge" id="gameover-badge">NO MORE MOVES</div>
+      <h2 id="gameover-title">Out of Space!</h2>
+      <p class="gameover-subtitle" id="gameover-subtitle">You can still use a Power-Up if you have Energy, or start a fresh run!</p>
+
+      <div class="gameover-stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">SCORE</span>
+          <span class="stat-val" id="final-score">0</span>
+        </div>
+        <div class="stat-box highlight">
+          <span class="stat-label">BEST</span>
+          <span class="stat-val" id="final-best">0</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">MAX COMBO</span>
+          <span class="stat-val" id="final-combo">×1</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">LINES CLEARED</span>
+          <span class="stat-val" id="final-lines">0</span>
+        </div>
+      </div>
+
+      <div class="dialog-footer gameover-actions">
+        <button type="button" class="secondary-action-btn" id="rescue-bomb-btn" hidden>
+          💣 Emergency 3×3 Blast (Continue Run)
+        </button>
+        <button type="button" class="primary-action-btn" id="play-again-btn">
+          ▶ Play Again
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="game.js" defer></script>
+</body>
+</html>
