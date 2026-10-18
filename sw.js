@@ -1,4 +1,4 @@
-const CACHE_NAME = 'block-blast-pro-v4';
+const CACHE_NAME = 'block-blast-pro-v5';
 const ASSETS = [
   './',
   './index.html',

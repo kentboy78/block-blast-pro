@@ -93,22 +93,79 @@ const SHAPES = [
   { name: 'square3x3', weight: 5, color: 1, matrix: [[1, 1, 1], [1, 1, 1], [1, 1, 1]] }
 ];
 
-// Synthesized Web Audio Sound Engine
+// Tiny 1-sample silent WAV data URI used to unlock iOS AVAudioSession even when the iPhone ringer switch is muted
+const SILENT_WAV_URI =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+// Synthesized Web Audio Sound Engine (with iOS Silent Switch & Gesture Unlock)
 class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    this.unlocked = false;
+    this.htmlAudioPrimer = null;
+    this.setupIOSAudioUnlock();
+  }
+
+  setupIOSAudioUnlock() {
+    const unlock = () => {
+      if (!this.enabled) return;
+
+      // 1. Set iOS 17+ AudioSession type to 'playback' so game sound works even when the iPhone ringer switch is on silent
+      if ('audioSession' in navigator && navigator.audioSession) {
+        try {
+          navigator.audioSession.type = 'playback';
+        } catch (_) {}
+      }
+
+      // 2. Initialize & resume Web Audio context
+      this.init();
+
+      // 3. Play a tiny silent WAV buffer + HTMLAudioElement primer once to unlock iOS WebKit audio hardware
+      if (!this.unlocked && this.ctx) {
+        try {
+          const buf = this.ctx.createBuffer(1, 1, 22050);
+          const src = this.ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(this.ctx.destination);
+          src.start(0);
+
+          if (!this.htmlAudioPrimer) {
+            this.htmlAudioPrimer = new Audio(SILENT_WAV_URI);
+            this.htmlAudioPrimer.volume = 0.01;
+          }
+          const playPromise = this.htmlAudioPrimer.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+          }
+
+          if (this.ctx.state === 'running') {
+            this.unlocked = true;
+          }
+        } catch (_) {}
+      }
+    };
+
+    window.addEventListener('touchstart', unlock, { passive: true });
+    window.addEventListener('touchend', unlock, { passive: true });
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('click', unlock, { passive: true });
   }
 
   init() {
+    if ('audioSession' in navigator && navigator.audioSession) {
+      try {
+        navigator.audioSession.type = 'playback';
+      } catch (_) {}
+    }
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+    if (this.ctx && this.ctx.state !== 'running') {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -121,36 +178,46 @@ class SoundEngine {
     }
   }
 
-  playTone(freq, duration = 0.1, type = 'sine', gainVal = 0.14, delay = 0) {
+  playTone(freq, duration = 0.1, type = 'sine', gainVal = 0.22, delay = 0) {
     if (!this.enabled) return;
     this.init();
     if (!this.ctx) return;
 
-    const now = this.ctx.currentTime + delay;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.exponentialRampToValueAtTime(freq * 1.04, now + duration * 0.5);
+    const schedule = () => {
+      try {
+        const now = this.ctx.currentTime + delay;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + duration * 0.5);
 
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(gainVal, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(gainVal, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + duration + 0.02);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      } catch (_) {}
+    };
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(schedule).catch(() => {});
+    } else {
+      schedule();
+    }
   }
 
   playPickup() {
-    this.playTone(340, 0.05, 'triangle', 0.09);
+    this.playTone(380, 0.055, 'triangle', 0.18);
     this.haptic(6);
   }
 
   playPlace() {
-    this.playTone(240, 0.07, 'triangle', 0.14);
-    this.playTone(360, 0.08, 'sine', 0.11, 0.02);
+    this.playTone(260, 0.075, 'triangle', 0.25);
+    this.playTone(390, 0.09, 'sine', 0.22, 0.02);
     this.haptic(10);
   }
 
@@ -159,7 +226,7 @@ class SoundEngine {
     const pitchShift = Math.min(combo - 1, 6) * 45;
     const count = Math.min(linesCount + 2, baseNotes.length);
     for (let i = 0; i < count; i++) {
-      this.playTone(baseNotes[i] + pitchShift, 0.2, 'triangle', 0.15, i * 0.05);
+      this.playTone(baseNotes[i] + pitchShift, 0.22, 'triangle', 0.24, i * 0.05);
     }
     this.haptic([15, 25, 20]);
   }
@@ -167,19 +234,19 @@ class SoundEngine {
   playAllClear() {
     const chord = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98];
     chord.forEach((f, idx) => {
-      this.playTone(f, 0.32, 'sine', 0.15, idx * 0.055);
+      this.playTone(f, 0.34, 'sine', 0.24, idx * 0.055);
     });
     this.haptic([20, 35, 40]);
   }
 
   playPowerup() {
-    this.playTone(440, 0.08, 'sine', 0.12, 0);
-    this.playTone(660, 0.12, 'triangle', 0.13, 0.045);
+    this.playTone(440, 0.08, 'sine', 0.2, 0);
+    this.playTone(660, 0.13, 'triangle', 0.22, 0.045);
     this.haptic(12);
   }
 
   playError() {
-    this.playTone(160, 0.12, 'sawtooth', 0.08, 0);
+    this.playTone(170, 0.12, 'sawtooth', 0.15, 0);
     this.haptic([10, 20, 10]);
   }
 }
@@ -213,9 +280,9 @@ class ParticleSystem {
     const cx = 6 + (c + 0.5) * cellW;
     const cy = 6 + (r + 0.5) * cellW;
 
-    for (let i = 0; i < 5; i++) {
-      const angle = (Math.PI * 2 * i) / 5 + (Math.random() - 0.5) * 0.5;
-      const speed = 1.5 + Math.random() * 3.2;
+    for (let i = 0; i < 4; i++) {
+      const angle = (Math.PI * 2 * i) / 4 + (Math.random() - 0.5) * 0.5;
+      const speed = 1.6 + Math.random() * 3.0;
       this.particles.push({
         x: cx,
         y: cy,
@@ -240,7 +307,7 @@ class ParticleSystem {
       p.x += p.vx;
       p.y += p.vy;
       p.vy += 0.18;
-      p.alpha -= 0.04;
+      p.alpha -= 0.045;
 
       if (p.alpha <= 0) {
         this.particles.splice(i, 1);
@@ -266,6 +333,8 @@ class BlockBlastGame {
   constructor() {
     this.mode = 'pro'; // 'pro' | 'gem' | 'pure'
     this.board = this.createEmptyBoard();
+    // Reusable scratch board for preview simulation (zero GC allocation during touch move!)
+    this.scratchBoard = this.createEmptyBoard();
     this.score = 0;
     this.bestScores = { pro: 0, gem: 0, pure: 0 };
     this.combo = 0;
@@ -285,11 +354,13 @@ class BlockBlastGame {
     this.activeDrag = null;
     this.previewKey = '';
     this.previewedCells = [];
+    this.proxyPool = [];
     this.kbdSelection = null;
 
     this.cacheDOM();
     this.fx = new ParticleSystem(this.fxCanvas);
     this.initBoardDOM();
+    this.initProxyPool();
     this.hideFloatingProxy();
     this.bindEvents();
     this.loadSavedState();
@@ -328,7 +399,6 @@ class BlockBlastGame {
     this.floatingProxy = document.getElementById('floating-drag-piece');
     this.kbdHintBar = document.getElementById('kbd-hint-bar');
 
-    // Full-slot drag handles
     this.handleEls = {
       0: document.getElementById('tray-slot-0'),
       1: document.getElementById('tray-slot-1'),
@@ -336,7 +406,6 @@ class BlockBlastGame {
       hold: document.getElementById('tray-slot-hold')
     };
 
-    // Inner piece cards
     this.slotEls = {
       0: document.getElementById('piece-slot-0'),
       1: document.getElementById('piece-slot-1'),
@@ -368,10 +437,20 @@ class BlockBlastGame {
     }
   }
 
+  // Pre-allocate 25 reusable child nodes for the floating proxy so picking up a piece never allocates DOM nodes
+  initProxyPool() {
+    this.floatingProxy.innerHTML = '';
+    this.proxyPool = [];
+    for (let i = 0; i < 25; i++) {
+      const div = document.createElement('div');
+      this.floatingProxy.appendChild(div);
+      this.proxyPool.push(div);
+    }
+  }
+
   hideFloatingProxy() {
     this.floatingProxy.hidden = true;
     this.floatingProxy.style.display = 'none';
-    this.floatingProxy.innerHTML = '';
     this.floatingProxy.style.transform = 'translate3d(-9999px, -9999px, 0)';
   }
 
@@ -431,7 +510,7 @@ class BlockBlastGame {
       }
     });
 
-    // Bind dedicated drag handles using Pointer Capture per modern-web-guidance `drag`
+    // Bind dedicated drag handles
     Object.entries(this.handleEls).forEach(([slotKey, handleEl]) => {
       if (handleEl) this.setupDragHandle(slotKey, handleEl);
     });
@@ -495,7 +574,6 @@ class BlockBlastGame {
 
     handle.addEventListener('pointermove', (event) => {
       if (!this.activeDrag || this.activeDrag.pointerId !== event.pointerId) return;
-      event.preventDefault();
       this.updateFloatingProxyPosition(event.clientX, event.clientY);
     });
 
@@ -540,23 +618,31 @@ class BlockBlastGame {
   renderFloatingProxy(piece, cellSize) {
     const rows = piece.matrix.length;
     const cols = piece.matrix[0].length;
-    this.floatingProxy.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
-    this.floatingProxy.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
-    this.floatingProxy.innerHTML = '';
+    const total = rows * cols;
+    const px = `${cellSize.toFixed(1)}px`;
 
-    const colorObj = COLORS[piece.color];
+    this.floatingProxy.style.gridTemplateColumns = `repeat(${cols}, ${px})`;
+    this.floatingProxy.style.gridTemplateRows = `repeat(${rows}, ${px})`;
+
+    const colorCss = COLORS[piece.color].css;
+    let idx = 0;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const div = document.createElement('div');
+        const div = this.proxyPool[idx++];
+        div.style.display = 'block';
         if (piece.matrix[r][c]) {
-          div.className = `block-tile ${colorObj.css}`;
-          if (piece.gems && piece.gems[r]?.[c]) {
-            div.classList.add('has-gem');
-          }
+          div.className = piece.gems && piece.gems[r]?.[c]
+            ? `block-tile ${colorCss} has-gem`
+            : `block-tile ${colorCss}`;
+        } else {
+          div.className = '';
         }
-        this.floatingProxy.appendChild(div);
       }
     }
+    for (let i = total; i < this.proxyPool.length; i++) {
+      this.proxyPool[i].style.display = 'none';
+    }
+
     this.floatingProxy.hidden = false;
     this.floatingProxy.style.display = 'grid';
   }
@@ -565,8 +651,10 @@ class BlockBlastGame {
     const drag = this.activeDrag;
     if (!drag) return;
 
-    let x = clientX - drag.offsetX;
-    let y = clientY - drag.offsetY;
+    // Pure 1:1 smooth finger tracking — no artificial snap-pull jitter on the floating piece!
+    const x = clientX - drag.offsetX;
+    const y = clientY - drag.offsetY;
+    this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 
     // 1. Check Hold Vault hover
     const vaultRect = drag.vaultRect;
@@ -577,7 +665,6 @@ class BlockBlastGame {
         clientY >= vaultRect.top - 10 &&
         clientY <= vaultRect.bottom + 10
       ) {
-        this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
         if (!drag.overVault) {
           drag.overVault = true;
           drag.targetCell = null;
@@ -603,9 +690,9 @@ class BlockBlastGame {
     const rCenter = Math.round(rawRow);
     const cCenter = Math.round(rawCol);
 
-    // 3. Magnetic 3x3 neighborhood search (including diagonals) for nearest valid placement
+    // 3. Magnetic 3x3 neighborhood search for the board ghost target
     let bestPlacement = null;
-    let bestDist = 1.25; // generous magnetic snap radius in grid cells
+    let bestDist = 1.25;
 
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
@@ -620,16 +707,6 @@ class BlockBlastGame {
     }
 
     drag.targetCell = bestPlacement;
-
-    // Subtle magnetic pull toward valid target slot so pieces feel like they lock in smoothly
-    if (bestPlacement) {
-      const snapX = boardRect.left + bestPlacement.c * drag.cellStride;
-      const snapY = boardRect.top + bestPlacement.r * drag.cellStride;
-      x = x + (snapX - x) * 0.28;
-      y = y + (snapY - y) * 0.28;
-    }
-
-    this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 
     const nextKey = bestPlacement ? `${bestPlacement.r},${bestPlacement.c}` : 'none';
     if (nextKey !== this.previewKey) {
@@ -758,7 +835,6 @@ class BlockBlastGame {
     return false;
   }
 
-  // Only reset cells that were touched by the preview (avoids 64-cell DOM loops on move)
   clearBoardPreviews() {
     for (let i = 0; i < this.previewedCells.length; i++) {
       const [r, c] = this.previewedCells[i];
@@ -773,7 +849,13 @@ class BlockBlastGame {
 
   showPlacementPreview(piece, baseR, baseC) {
     const colorCss = COLORS[piece.color].css;
-    const tempBoard = this.board.map((row) => [...row]);
+    // Copy current board into reusable scratchBoard without allocating new arrays
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        this.scratchBoard[r][c] = this.board[r][c];
+      }
+    }
+
     const rows = piece.matrix.length;
     const cols = piece.matrix[0].length;
 
@@ -782,42 +864,45 @@ class BlockBlastGame {
         if (piece.matrix[r][c]) {
           const br = baseR + r;
           const bc = baseC + c;
-          tempBoard[br][bc] = { color: piece.color };
+          this.scratchBoard[br][bc] = 1;
           const cellEl = this.cellEls[br][bc];
-          cellEl.classList.add('block-tile', colorCss, 'ghost-preview');
+          cellEl.classList.add(colorCss, 'ghost-preview');
           this.previewedCells.push([br, bc]);
         }
       }
     }
 
-    const fullRows = [];
-    const fullCols = [];
     for (let r = 0; r < BOARD_SIZE; r++) {
-      if (tempBoard[r].every((cell) => cell !== null)) fullRows.push(r);
+      let rowFull = true;
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (this.scratchBoard[r][c] === null) {
+          rowFull = false;
+          break;
+        }
+      }
+      if (rowFull) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+          this.cellEls[r][c].classList.add('will-clear');
+          this.previewedCells.push([r, c]);
+        }
+      }
     }
+
     for (let c = 0; c < BOARD_SIZE; c++) {
       let colFull = true;
       for (let r = 0; r < BOARD_SIZE; r++) {
-        if (tempBoard[r][c] === null) {
+        if (this.scratchBoard[r][c] === null) {
           colFull = false;
           break;
         }
       }
-      if (colFull) fullCols.push(c);
+      if (colFull) {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+          this.cellEls[r][c].classList.add('will-clear');
+          this.previewedCells.push([r, c]);
+        }
+      }
     }
-
-    fullRows.forEach((r) => {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        this.cellEls[r][c].classList.add('will-clear');
-        this.previewedCells.push([r, c]);
-      }
-    });
-    fullCols.forEach((c) => {
-      for (let r = 0; r < BOARD_SIZE; r++) {
-        this.cellEls[r][c].classList.add('will-clear');
-        this.previewedCells.push([r, c]);
-      }
-    });
   }
 
   saveUndoState() {
