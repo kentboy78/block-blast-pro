@@ -314,17 +314,17 @@
   <!-- Game Over / Stage Clear Dialog -->
   <dialog id="gameover-dialog" class="app-dialog" aria-labelledby="gameover-title">
     <div class="dialog-card gameover-card">
-      <div class="gameover-badge" id="gameover-badge">NO MORE MOVES</div>
-      <h2 id="gameover-title">Out of Space!</h2>
-      <p class="gameover-subtitle" id="gameover-subtitle">You can still use a Power-Up if you have Energy, or start a fresh run!</p>
+      <div class="gameover-badge" id="gameover-badge">GAME OVER</div>
+      <h2 id="gameover-title">You Lost — No More Moves!</h2>
+      <p class="gameover-subtitle" id="gameover-subtitle">None of your remaining blocks can fit on the board.</p>
 
       <div class="gameover-stats-grid">
         <div class="stat-box">
-          <span class="stat-label">SCORE</span>
+          <span class="stat-label">FINAL SCORE</span>
           <span class="stat-val" id="final-score">0</span>
         </div>
         <div class="stat-box highlight">
-          <span class="stat-label">BEST</span>
+          <span class="stat-label">ALL-TIME BEST</span>
           <span class="stat-val" id="final-best">0</span>
         </div>
         <div class="stat-box">
@@ -338,11 +338,14 @@
       </div>
 
       <div class="dialog-footer gameover-actions">
-        <button type="button" class="secondary-action-btn" id="rescue-bomb-btn" hidden>
-          💣 Emergency 3×3 Blast (Continue Run)
-        </button>
         <button type="button" class="primary-action-btn" id="play-again-btn">
-          ▶ Play Again
+          ▶ Play Again (New Game)
+        </button>
+        <button type="button" class="secondary-action-btn" id="rescue-rotate-btn" hidden>
+          ↻ Rotate Pieces for 1⚡ (Continue)
+        </button>
+        <button type="button" class="secondary-action-btn" id="rescue-bomb-btn" hidden>
+          💣 Emergency 3×3 Blast for 2⚡ (Continue)
         </button>
       </div>
     </div>

@@ -249,6 +249,14 @@ class SoundEngine {
     this.playTone(170, 0.12, 'sawtooth', 0.15, 0);
     this.haptic([10, 20, 10]);
   }
+
+  playGameOver() {
+    const notes = [392.0, 349.23, 311.13, 261.63];
+    notes.forEach((f, idx) => {
+      this.playTone(f, 0.22, 'triangle', 0.24, idx * 0.12);
+    });
+    this.haptic([30, 40, 60]);
+  }
 }
 
 const sfx = new SoundEngine();
@@ -482,6 +490,14 @@ class BlockBlastGame {
       this.startNewGame(this.mode);
     });
 
+    const rescueRotateBtn = document.getElementById('rescue-rotate-btn');
+    if (rescueRotateBtn) {
+      rescueRotateBtn.addEventListener('click', () => {
+        if (this.gameoverDialog.open) this.gameoverDialog.close();
+        this.useRotatePowerup();
+      });
+    }
+
     document.getElementById('rescue-bomb-btn').addEventListener('click', () => {
       if (this.gameoverDialog.open) this.gameoverDialog.close();
       this.executeCenterEmergencyBlast();
@@ -596,6 +612,13 @@ class BlockBlastGame {
         if (drag.targetCell) {
           this.placePieceOnBoard(drag.slotKey, drag.piece, drag.targetCell.r, drag.targetCell.c);
           return;
+        }
+        if (!this.hasAnyValidMove()) {
+          this.showGameOverModal(false);
+          return;
+        }
+        if (!this.hasAnyTrayMove() && this.holdPiece && this.canPieceFitAnywhere(this.holdPiece)) {
+          this.spawnBanner('💡 Use your piece in HOLD!');
         }
       }
     };
@@ -1047,14 +1070,23 @@ class BlockBlastGame {
 
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
+  }
 
+  checkPostActionState() {
     if (this.mode === 'gem' && this.gemsCollected >= this.gemTarget) {
-      setTimeout(() => this.showGameOverModal(true), 320);
+      setTimeout(() => this.showGameOverModal(true), 280);
       return;
     }
 
     if (!this.hasAnyValidMove()) {
-      setTimeout(() => this.showGameOverModal(false), 360);
+      this.spawnBanner('❌ NO MORE MOVES — GAME OVER!');
+      setTimeout(() => this.showGameOverModal(false), 320);
+      return;
+    }
+
+    if (!this.hasAnyTrayMove() && this.mode !== 'pure' && this.holdPiece && this.canPieceFitAnywhere(this.holdPiece)) {
+      this.spawnBanner('💡 Tray blocked — use your HOLD piece!');
     }
   }
 
@@ -1073,6 +1105,7 @@ class BlockBlastGame {
     }
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
   }
 
   dealNewTray() {
@@ -1215,6 +1248,7 @@ class BlockBlastGame {
     this.spawnBanner('↻ PIECES ROTATED!');
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
   }
 
   toggleBombMode() {
@@ -1296,6 +1330,7 @@ class BlockBlastGame {
     this.spawnBanner(`💥 BOOM! +${clearedBlocks * 25}`);
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
   }
 
   executeCenterEmergencyBlast() {
@@ -1316,6 +1351,7 @@ class BlockBlastGame {
     this.spawnBanner('🎲 FRESH SMART DEAL!');
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
   }
 
   useUndoPowerup() {
@@ -1340,23 +1376,30 @@ class BlockBlastGame {
     this.spawnBanner('↩️ MOVE UNDONE');
     this.renderAll();
     this.saveState();
+    this.checkPostActionState();
+  }
+
+  hasAnyTrayMove() {
+    return this.tray.some((p) => p && this.canPieceFitAnywhere(p));
   }
 
   hasAnyValidMove() {
-    const availablePieces = [...this.tray];
-    if (this.mode !== 'pure') {
-      if (this.holdPiece) {
-        availablePieces.push(this.holdPiece);
-      } else {
-        const remainingInTray = this.tray.filter((p) => p !== null).length;
-        if (remainingInTray === 1 && this.energy >= 1) {
-          const lastPiece = this.tray.find((p) => p !== null);
-          const rotated = { ...lastPiece, matrix: this.rotateMatrixCW(lastPiece.matrix) };
-          if (this.canPieceFitAnywhere(rotated)) return true;
-        }
-      }
+    if (this.hasAnyTrayMove()) return true;
+    if (this.mode !== 'pure' && this.holdPiece && this.canPieceFitAnywhere(this.holdPiece)) {
+      return true;
     }
-    return availablePieces.some((p) => p && this.canPieceFitAnywhere(p));
+    return false;
+  }
+
+  canRescueWithRotate() {
+    if (this.mode === 'pure' || this.energy < 1) return false;
+    const pieces = [...this.tray];
+    if (this.holdPiece) pieces.push(this.holdPiece);
+    return pieces.some((p) => {
+      if (!p) return false;
+      const rotated = { ...p, matrix: this.rotateMatrixCW(p.matrix) };
+      return this.canPieceFitAnywhere(rotated);
+    });
   }
 
   addScore(points) {
@@ -1442,6 +1485,13 @@ class BlockBlastGame {
       this.slotEls.hold.innerHTML = '';
       this.vaultPlaceholder.hidden = false;
     }
+
+    const holdIsOnlyMove =
+      this.mode !== 'pure' &&
+      !this.hasAnyTrayMove() &&
+      Boolean(this.holdPiece) &&
+      this.canPieceFitAnywhere(this.holdPiece);
+    this.holdVault.classList.toggle('hold-only-move', holdIsOnlyMove);
   }
 
   renderPieceCard(cardEl, piece) {
@@ -1486,23 +1536,28 @@ class BlockBlastGame {
     const badge = document.getElementById('gameover-badge');
     const title = document.getElementById('gameover-title');
     const subtitle = document.getElementById('gameover-subtitle');
-    const rescueBtn = document.getElementById('rescue-bomb-btn');
+    const rescueRotateBtn = document.getElementById('rescue-rotate-btn');
+    const rescueBombBtn = document.getElementById('rescue-bomb-btn');
 
     if (isVictory) {
       badge.textContent = 'STAGE COMPLETE';
       title.textContent = '💎 All 12 Gems Collected!';
       subtitle.textContent = 'Incredible spatial mastery! Ready for another round?';
-      rescueBtn.hidden = true;
+      if (rescueRotateBtn) rescueRotateBtn.hidden = true;
+      rescueBombBtn.hidden = true;
       sfx.playAllClear();
     } else {
-      badge.textContent = 'NO MORE MOVES';
-      title.textContent = 'Out of Space!';
-      const canRescue = this.mode !== 'pure' && this.energy >= 2;
-      rescueBtn.hidden = !canRescue;
-      subtitle.textContent = canRescue
-        ? 'Wait! You have enough Energy (2⚡) to trigger an Emergency 3×3 Blast and keep your run alive!'
-        : 'Great run! Every tray is saved automatically.';
-      sfx.playError();
+      badge.textContent = 'GAME OVER';
+      title.textContent = 'You Lost — No More Moves!';
+      const canRotateRescue = this.canRescueWithRotate();
+      const canBombRescue = this.mode !== 'pure' && this.energy >= 2;
+      if (rescueRotateBtn) rescueRotateBtn.hidden = !canRotateRescue;
+      rescueBombBtn.hidden = !canBombRescue;
+      subtitle.textContent =
+        canRotateRescue || canBombRescue
+          ? 'None of your remaining blocks fit on the board. Start a new game below, or spend Energy to rescue this run!'
+          : 'None of your remaining blocks can fit on the 8×8 board.';
+      sfx.playGameOver();
     }
 
     document.getElementById('final-score').textContent = this.score.toLocaleString();
@@ -1592,6 +1647,7 @@ class BlockBlastGame {
             this.dealNewTray();
           }
           this.renderAll();
+          this.checkPostActionState();
           return;
         }
       }

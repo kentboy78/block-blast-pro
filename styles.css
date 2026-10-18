@@ -589,9 +589,11 @@ body::before {
   overflow: hidden;
 }
 
-.hold-vault.vault-hover {
+.hold-vault.vault-hover,
+.hold-vault.hold-only-move {
   border-color: var(--accent-gold);
   background-color: #312e81;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.45);
 }
 
 .vault-header {
@@ -644,8 +646,10 @@ dialog.app-dialog {
 dialog.app-dialog[open] {
   opacity: 1;
   transform: scale(1);
+}
 
-  @starting-style {
+@starting-style {
+  dialog.app-dialog[open] {
     opacity: 0;
     transform: scale(0.92);
   }
@@ -661,8 +665,10 @@ dialog.app-dialog::backdrop {
 
 dialog.app-dialog[open]::backdrop {
   background-color: rgba(4, 7, 17, 0.78);
+}
 
-  @starting-style {
+@starting-style {
+  dialog.app-dialog[open]::backdrop {
     background-color: rgba(0, 0, 0, 0);
   }
 }
