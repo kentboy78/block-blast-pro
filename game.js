@@ -97,33 +97,68 @@ const SHAPES = [
 const SILENT_WAV_URI =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
-// Synthesized Web Audio Sound Engine (with iOS Silent Switch & Gesture Unlock)
+// Synthesized Web Audio Sound Engine (with iOS Silent Switch, Capture-Phase Unlock & App-Switch Recovery)
 class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
     this.unlocked = false;
+    this.needsFreshContext = false;
     this.htmlAudioPrimer = null;
     this.setupIOSAudioUnlock();
+  }
+
+  activateAudioSession() {
+    if ('audioSession' in navigator && navigator.audioSession) {
+      try {
+        navigator.audioSession.type = 'auto';
+        navigator.audioSession.type = 'playback';
+      } catch (_) {}
+    }
+  }
+
+  teardownContext() {
+    this.unlocked = false;
+    this.needsFreshContext = true;
+    if (this.ctx) {
+      try {
+        this.ctx.close().catch(() => {});
+      } catch (_) {}
+      this.ctx = null;
+    }
   }
 
   setupIOSAudioUnlock() {
     const unlock = () => {
       if (!this.enabled) return;
 
-      // 1. Set iOS 17+ AudioSession type to 'playback' so game sound works even when the iPhone ringer switch is on silent
-      if ('audioSession' in navigator && navigator.audioSession) {
-        try {
-          navigator.audioSession.type = 'playback';
-        } catch (_) {}
+      // 1. Cycle iOS 17+ AudioSession to 'playback' so CoreAudio reclaims hardware output after app switching
+      this.activateAudioSession();
+
+      // 2. If returning from background or stuck in iOS 'interrupted'/'closed' state, recreate a clean AudioContext
+      if (
+        this.needsFreshContext ||
+        !this.ctx ||
+        this.ctx.state === 'closed' ||
+        this.ctx.state === 'interrupted'
+      ) {
+        this.needsFreshContext = false;
+        if (this.ctx) {
+          try {
+            this.ctx.close().catch(() => {});
+          } catch (_) {}
+          this.ctx = null;
+        }
       }
 
-      // 2. Initialize & resume Web Audio context
       this.init();
 
-      // 3. Play a tiny silent WAV buffer + HTMLAudioElement primer once to unlock iOS WebKit audio hardware
-      if (!this.unlocked && this.ctx) {
+      // 3. Play silent WebAudio buffer + HTMLAudioElement primer whenever not yet unlocked or not running
+      if (this.ctx && (!this.unlocked || this.ctx.state !== 'running')) {
         try {
+          if (this.ctx.state !== 'running') {
+            this.ctx.resume().catch(() => {});
+          }
           const buf = this.ctx.createBuffer(1, 1, 22050);
           const src = this.ctx.createBufferSource();
           src.buffer = buf;
@@ -133,35 +168,65 @@ class SoundEngine {
           if (!this.htmlAudioPrimer) {
             this.htmlAudioPrimer = new Audio(SILENT_WAV_URI);
             this.htmlAudioPrimer.volume = 0.01;
+            this.htmlAudioPrimer.setAttribute('playsinline', '');
           }
+          this.htmlAudioPrimer.currentTime = 0;
           const playPromise = this.htmlAudioPrimer.play();
           if (playPromise && typeof playPromise.catch === 'function') {
             playPromise.catch(() => {});
           }
 
-          if (this.ctx.state === 'running') {
-            this.unlocked = true;
-          }
+          this.unlocked = true;
         } catch (_) {}
       }
     };
 
-    window.addEventListener('touchstart', unlock, { passive: true });
-    window.addEventListener('touchend', unlock, { passive: true });
-    window.addEventListener('pointerdown', unlock, { passive: true });
-    window.addEventListener('click', unlock, { passive: true });
+    // Use capture: true so unlock runs BEFORE any piece drag handle's pointerdown calls playPickup()
+    window.addEventListener('touchstart', unlock, { capture: true, passive: true });
+    window.addEventListener('touchend', unlock, { capture: true, passive: true });
+    window.addEventListener('pointerdown', unlock, { capture: true, passive: true });
+    window.addEventListener('click', unlock, { capture: true, passive: true });
+
+    // Detect when user leaves or returns to the app (Home Screen switch, Safari tab switch, or lock screen)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        this.teardownContext();
+      } else if (document.visibilityState === 'visible') {
+        this.unlocked = false;
+        this.activateAudioSession();
+      }
+    });
+
+    window.addEventListener('pagehide', () => this.teardownContext());
+    window.addEventListener('pageshow', () => {
+      this.unlocked = false;
+      this.activateAudioSession();
+    });
+
+    window.addEventListener('blur', () => {
+      this.unlocked = false;
+    });
+
+    window.addEventListener('focus', () => {
+      this.unlocked = false;
+      this.activateAudioSession();
+      if (this.ctx && this.ctx.state !== 'running') {
+        this.needsFreshContext = true;
+      }
+    });
   }
 
   init() {
-    if ('audioSession' in navigator && navigator.audioSession) {
-      try {
-        navigator.audioSession.type = 'playback';
-      } catch (_) {}
-    }
+    this.activateAudioSession();
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
+        this.ctx.onstatechange = () => {
+          if (this.ctx && this.ctx.state !== 'running') {
+            this.unlocked = false;
+          }
+        };
       }
     }
     if (this.ctx && this.ctx.state !== 'running') {
@@ -184,6 +249,7 @@ class SoundEngine {
     if (!this.ctx) return;
 
     const schedule = () => {
+      if (!this.ctx) return;
       try {
         const now = this.ctx.currentTime + delay;
         const osc = this.ctx.createOscillator();
@@ -203,7 +269,7 @@ class SoundEngine {
       } catch (_) {}
     };
 
-    if (this.ctx.state === 'suspended') {
+    if (this.ctx.state !== 'running') {
       this.ctx.resume().then(schedule).catch(() => {});
     } else {
       schedule();
