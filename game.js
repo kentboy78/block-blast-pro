@@ -27,7 +27,7 @@ if (!('commandForElement' in HTMLButtonElement.prototype)) {
   });
 }
 
-// Register Service Worker for 100% offline iPhone Home Screen Web App support (requires HTTPS or localhost)
+// Register Service Worker for 100% offline iPhone Home Screen Web App support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -36,6 +36,7 @@ if ('serviceWorker' in navigator) {
 
 const BOARD_SIZE = 8;
 const MAX_ENERGY = 5;
+const GRID_GAP = 3;
 
 const COLORS = [
   { id: 'coral', css: 'color-coral', hex: '#f43f5e' },
@@ -143,14 +144,14 @@ class SoundEngine {
   }
 
   playPickup() {
-    this.playTone(340, 0.06, 'triangle', 0.1);
+    this.playTone(340, 0.05, 'triangle', 0.09);
     this.haptic(6);
   }
 
   playPlace() {
-    this.playTone(240, 0.08, 'triangle', 0.15);
-    this.playTone(360, 0.09, 'sine', 0.12, 0.025);
-    this.haptic(12);
+    this.playTone(240, 0.07, 'triangle', 0.14);
+    this.playTone(360, 0.08, 'sine', 0.11, 0.02);
+    this.haptic(10);
   }
 
   playClear(linesCount, combo) {
@@ -158,34 +159,34 @@ class SoundEngine {
     const pitchShift = Math.min(combo - 1, 6) * 45;
     const count = Math.min(linesCount + 2, baseNotes.length);
     for (let i = 0; i < count; i++) {
-      this.playTone(baseNotes[i] + pitchShift, 0.22, 'triangle', 0.16, i * 0.055);
+      this.playTone(baseNotes[i] + pitchShift, 0.2, 'triangle', 0.15, i * 0.05);
     }
-    this.haptic([18, 30, 25]);
+    this.haptic([15, 25, 20]);
   }
 
   playAllClear() {
     const chord = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98];
     chord.forEach((f, idx) => {
-      this.playTone(f, 0.36, 'sine', 0.16, idx * 0.06);
+      this.playTone(f, 0.32, 'sine', 0.15, idx * 0.055);
     });
-    this.haptic([25, 40, 45]);
+    this.haptic([20, 35, 40]);
   }
 
   playPowerup() {
-    this.playTone(440, 0.09, 'sine', 0.12, 0);
-    this.playTone(660, 0.14, 'triangle', 0.14, 0.05);
-    this.haptic(15);
+    this.playTone(440, 0.08, 'sine', 0.12, 0);
+    this.playTone(660, 0.12, 'triangle', 0.13, 0.045);
+    this.haptic(12);
   }
 
   playError() {
-    this.playTone(160, 0.14, 'sawtooth', 0.08, 0);
+    this.playTone(160, 0.12, 'sawtooth', 0.08, 0);
     this.haptic([10, 20, 10]);
   }
 }
 
 const sfx = new SoundEngine();
 
-// Particle FX Engine on Canvas
+// Lightweight Particle FX Engine on Canvas
 class ParticleSystem {
   constructor(canvas) {
     this.canvas = canvas;
@@ -208,18 +209,18 @@ class ParticleSystem {
 
   burstCell(r, c, hexColor) {
     if (!this.width) this.resize();
-    const cellW = (this.width - 16) / BOARD_SIZE;
-    const cx = 8 + (c + 0.5) * cellW;
-    const cy = 8 + (r + 0.5) * cellW;
+    const cellW = (this.width - 12) / BOARD_SIZE;
+    const cx = 6 + (c + 0.5) * cellW;
+    const cy = 6 + (r + 0.5) * cellW;
 
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI * 2 * i) / 6 + (Math.random() - 0.5) * 0.5;
-      const speed = 1.5 + Math.random() * 3.4;
+    for (let i = 0; i < 5; i++) {
+      const angle = (Math.PI * 2 * i) / 5 + (Math.random() - 0.5) * 0.5;
+      const speed = 1.5 + Math.random() * 3.2;
       this.particles.push({
         x: cx,
         y: cy,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.1,
+        vy: Math.sin(angle) * speed - 1.0,
         size: 4 + Math.random() * 4,
         color: hexColor || '#38bdf8',
         alpha: 1
@@ -239,7 +240,7 @@ class ParticleSystem {
       p.x += p.vx;
       p.y += p.vy;
       p.vy += 0.18;
-      p.alpha -= 0.035;
+      p.alpha -= 0.04;
 
       if (p.alpha <= 0) {
         this.particles.splice(i, 1);
@@ -283,11 +284,13 @@ class BlockBlastGame {
     // Drag & Keyboard Interaction State
     this.activeDrag = null;
     this.previewKey = '';
+    this.previewedCells = [];
     this.kbdSelection = null;
 
     this.cacheDOM();
     this.fx = new ParticleSystem(this.fxCanvas);
     this.initBoardDOM();
+    this.hideFloatingProxy();
     this.bindEvents();
     this.loadSavedState();
   }
@@ -325,6 +328,15 @@ class BlockBlastGame {
     this.floatingProxy = document.getElementById('floating-drag-piece');
     this.kbdHintBar = document.getElementById('kbd-hint-bar');
 
+    // Full-slot drag handles
+    this.handleEls = {
+      0: document.getElementById('tray-slot-0'),
+      1: document.getElementById('tray-slot-1'),
+      2: document.getElementById('tray-slot-2'),
+      hold: document.getElementById('tray-slot-hold')
+    };
+
+    // Inner piece cards
     this.slotEls = {
       0: document.getElementById('piece-slot-0'),
       1: document.getElementById('piece-slot-1'),
@@ -354,6 +366,13 @@ class BlockBlastGame {
       }
       this.cellEls.push(rowEls);
     }
+  }
+
+  hideFloatingProxy() {
+    this.floatingProxy.hidden = true;
+    this.floatingProxy.style.display = 'none';
+    this.floatingProxy.innerHTML = '';
+    this.floatingProxy.style.transform = 'translate3d(-9999px, -9999px, 0)';
   }
 
   bindEvents() {
@@ -413,8 +432,8 @@ class BlockBlastGame {
     });
 
     // Bind dedicated drag handles using Pointer Capture per modern-web-guidance `drag`
-    Object.entries(this.slotEls).forEach(([slotKey, handleEl]) => {
-      this.setupDragHandle(slotKey, handleEl);
+    Object.entries(this.handleEls).forEach(([slotKey, handleEl]) => {
+      if (handleEl) this.setupDragHandle(slotKey, handleEl);
     });
 
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
@@ -434,20 +453,21 @@ class BlockBlastGame {
       event.preventDefault();
       sfx.playPickup();
 
-      // Cache geometry once on pointerdown to avoid layout reflows during pointermove!
-      const handleRect = handle.getBoundingClientRect();
+      // Measure board geometry once on pointerdown (zero forced layout during drag)
       const boardRect = this.boardGrid.getBoundingClientRect();
       const vaultRect = this.mode !== 'pure' ? this.holdVault.getBoundingClientRect() : null;
-      const cellSize = (boardRect.width - 28) / BOARD_SIZE;
+      const cellStride = (boardRect.width + GRID_GAP) / BOARD_SIZE;
+      const cellSize = cellStride - GRID_GAP;
 
       const rows = piece.matrix.length;
       const cols = piece.matrix[0].length;
-      const proxyWidth = cols * cellSize + (cols - 1) * 4;
-      const proxyHeight = rows * cellSize + (rows - 1) * 4;
+      const proxyWidth = cols * cellSize + (cols - 1) * GRID_GAP;
+      const proxyHeight = rows * cellSize + (rows - 1) * GRID_GAP;
 
-      const relX = (event.clientX - handleRect.left) / Math.max(handleRect.width, 1);
-      const relY = (event.clientY - handleRect.top) / Math.max(handleRect.height, 1);
-      const touchLiftY = event.pointerType === 'touch' ? 84 : 18;
+      // Center horizontally on finger and lift comfortably above thumb on touch devices
+      const touchLiftY = event.pointerType === 'touch' ? 76 : 14;
+      const offsetX = proxyWidth * 0.5;
+      const offsetY = proxyHeight * 0.5 + touchLiftY;
 
       this.activeDrag = {
         slotKey,
@@ -456,8 +476,9 @@ class BlockBlastGame {
         boardRect,
         vaultRect,
         cellSize,
-        offsetX: relX * proxyWidth,
-        offsetY: relY * proxyHeight + touchLiftY,
+        cellStride,
+        offsetX,
+        offsetY,
         targetCell: null,
         overVault: false
       };
@@ -474,6 +495,7 @@ class BlockBlastGame {
 
     handle.addEventListener('pointermove', (event) => {
       if (!this.activeDrag || this.activeDrag.pointerId !== event.pointerId) return;
+      event.preventDefault();
       this.updateFloatingProxyPosition(event.clientX, event.clientY);
     });
 
@@ -484,7 +506,7 @@ class BlockBlastGame {
       this.previewKey = '';
 
       handle.classList.remove('dragging', 'dragging-source');
-      this.floatingProxy.hidden = true;
+      this.hideFloatingProxy();
       this.holdVault.classList.remove('vault-hover');
       this.clearBoardPreviews();
 
@@ -536,25 +558,26 @@ class BlockBlastGame {
       }
     }
     this.floatingProxy.hidden = false;
+    this.floatingProxy.style.display = 'grid';
   }
 
   updateFloatingProxyPosition(clientX, clientY) {
     const drag = this.activeDrag;
     if (!drag) return;
 
-    const x = clientX - drag.offsetX;
-    const y = clientY - drag.offsetY;
-    this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    let x = clientX - drag.offsetX;
+    let y = clientY - drag.offsetY;
 
-    // Check if pointer is hovering over Hold Vault using cached vaultRect
+    // 1. Check Hold Vault hover
     const vaultRect = drag.vaultRect;
     if (vaultRect && drag.slotKey !== 'hold') {
       if (
-        clientX >= vaultRect.left - 8 &&
-        clientX <= vaultRect.right + 8 &&
-        clientY >= vaultRect.top - 8 &&
-        clientY <= vaultRect.bottom + 8
+        clientX >= vaultRect.left - 10 &&
+        clientX <= vaultRect.right + 10 &&
+        clientY >= vaultRect.top - 10 &&
+        clientY <= vaultRect.bottom + 10
       ) {
+        this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
         if (!drag.overVault) {
           drag.overVault = true;
           drag.targetCell = null;
@@ -572,32 +595,42 @@ class BlockBlastGame {
       this.holdVault.classList.remove('vault-hover');
     }
 
-    // Compute board grid alignment using cached boardRect (zero forced reflow)
+    // 2. Exact fractional board coordinate of piece top-left (0, 0)
     const boardRect = drag.boardRect;
-    const step = boardRect.width / BOARD_SIZE;
-    const rawCol = (x + drag.cellSize * 0.5 - boardRect.left) / step - 0.5;
-    const rawRow = (y + drag.cellSize * 0.5 - boardRect.top) / step - 0.5;
+    const rawCol = (x - boardRect.left) / drag.cellStride;
+    const rawRow = (y - boardRect.top) / drag.cellStride;
 
-    const snappedCol = Math.round(rawCol);
-    const snappedRow = Math.round(rawRow);
+    const rCenter = Math.round(rawRow);
+    const cCenter = Math.round(rawCol);
 
+    // 3. Magnetic 3x3 neighborhood search (including diagonals) for nearest valid placement
     let bestPlacement = null;
-    const candidates = [
-      { r: snappedRow, c: snappedCol, dist: Math.hypot(rawRow - snappedRow, rawCol - snappedCol) },
-      { r: Math.floor(rawRow), c: snappedCol, dist: Math.hypot(rawRow - Math.floor(rawRow), rawCol - snappedCol) },
-      { r: Math.ceil(rawRow), c: snappedCol, dist: Math.hypot(rawRow - Math.ceil(rawRow), rawCol - snappedCol) },
-      { r: snappedRow, c: Math.floor(rawCol), dist: Math.hypot(rawRow - snappedRow, rawCol - Math.floor(rawCol)) },
-      { r: snappedRow, c: Math.ceil(rawCol), dist: Math.hypot(rawRow - snappedRow, rawCol - Math.ceil(rawCol)) }
-    ].sort((a, b) => a.dist - b.dist);
+    let bestDist = 1.25; // generous magnetic snap radius in grid cells
 
-    for (const cand of candidates) {
-      if (cand.dist <= 0.85 && this.canPlacePiece(drag.piece.matrix, cand.r, cand.c)) {
-        bestPlacement = { r: cand.r, c: cand.c };
-        break;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const r = rCenter + dr;
+        const c = cCenter + dc;
+        const dist = Math.hypot(r - rawRow, c - rawCol);
+        if (dist < bestDist && this.canPlacePiece(drag.piece.matrix, r, c)) {
+          bestDist = dist;
+          bestPlacement = { r, c };
+        }
       }
     }
 
     drag.targetCell = bestPlacement;
+
+    // Subtle magnetic pull toward valid target slot so pieces feel like they lock in smoothly
+    if (bestPlacement) {
+      const snapX = boardRect.left + bestPlacement.c * drag.cellStride;
+      const snapY = boardRect.top + bestPlacement.r * drag.cellStride;
+      x = x + (snapX - x) * 0.28;
+      y = y + (snapY - y) * 0.28;
+    }
+
+    this.floatingProxy.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+
     const nextKey = bestPlacement ? `${bestPlacement.r},${bestPlacement.c}` : 'none';
     if (nextKey !== this.previewKey) {
       this.previewKey = nextKey;
@@ -725,16 +758,17 @@ class BlockBlastGame {
     return false;
   }
 
+  // Only reset cells that were touched by the preview (avoids 64-cell DOM loops on move)
   clearBoardPreviews() {
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        const cellEl = this.cellEls[r][c];
-        cellEl.classList.remove('ghost-preview', 'will-clear');
-        if (!this.board[r][c]) {
-          cellEl.className = 'board-cell';
-        }
+    for (let i = 0; i < this.previewedCells.length; i++) {
+      const [r, c] = this.previewedCells[i];
+      const cellEl = this.cellEls[r][c];
+      cellEl.classList.remove('ghost-preview', 'will-clear');
+      if (!this.board[r][c]) {
+        cellEl.className = 'board-cell';
       }
     }
+    this.previewedCells.length = 0;
   }
 
   showPlacementPreview(piece, baseR, baseC) {
@@ -746,9 +780,12 @@ class BlockBlastGame {
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (piece.matrix[r][c]) {
-          tempBoard[baseR + r][baseC + c] = { color: piece.color };
-          const cellEl = this.cellEls[baseR + r][baseC + c];
+          const br = baseR + r;
+          const bc = baseC + c;
+          tempBoard[br][bc] = { color: piece.color };
+          const cellEl = this.cellEls[br][bc];
           cellEl.classList.add('block-tile', colorCss, 'ghost-preview');
+          this.previewedCells.push([br, bc]);
         }
       }
     }
@@ -772,11 +809,13 @@ class BlockBlastGame {
     fullRows.forEach((r) => {
       for (let c = 0; c < BOARD_SIZE; c++) {
         this.cellEls[r][c].classList.add('will-clear');
+        this.previewedCells.push([r, c]);
       }
     });
     fullCols.forEach((c) => {
       for (let r = 0; r < BOARD_SIZE; r++) {
         this.cellEls[r][c].classList.add('will-clear');
+        this.previewedCells.push([r, c]);
       }
     });
   }
@@ -806,7 +845,6 @@ class BlockBlastGame {
     let blocksPlaced = 0;
     const rows = piece.matrix.length;
     const cols = piece.matrix[0].length;
-    const newlyPlacedCoords = [];
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -816,7 +854,6 @@ class BlockBlastGame {
             color: piece.color,
             gem: hasGem
           };
-          newlyPlacedCoords.push([baseR + r, baseC + c]);
           blocksPlaced++;
         }
       }
@@ -923,7 +960,7 @@ class BlockBlastGame {
       this.dealNewTray();
     }
 
-    this.renderAll(newlyPlacedCoords);
+    this.renderAll();
     this.saveState();
 
     if (this.mode === 'gem' && this.gemsCollected >= this.gemTarget) {
@@ -1254,12 +1291,10 @@ class BlockBlastGame {
     el.className = 'floating-banner';
     el.textContent = text;
     this.floatingBanners.appendChild(el);
-    setTimeout(() => el.remove(), 880);
+    setTimeout(() => el.remove(), 800);
   }
 
-  renderAll(newlyPlacedCoords = []) {
-    const placedSet = new Set(newlyPlacedCoords.map(([r, c]) => `${r},${c}`));
-
+  renderAll() {
     for (let r = 0; r < BOARD_SIZE; r++) {
       for (let c = 0; c < BOARD_SIZE; c++) {
         const cellData = this.board[r][c];
@@ -1269,9 +1304,6 @@ class BlockBlastGame {
           const colorCss = COLORS[cellData.color].css;
           cellEl.classList.add('block-tile', colorCss);
           if (cellData.gem) cellEl.classList.add('has-gem');
-          if (placedSet.has(`${r},${c}`)) {
-            cellEl.classList.add('just-placed');
-          }
         }
       }
     }
@@ -1330,22 +1362,27 @@ class BlockBlastGame {
   renderPieceCard(cardEl, piece) {
     cardEl.innerHTML = '';
     if (!piece) {
-      cardEl.style.visibility = 'hidden';
+      cardEl.hidden = true;
       cardEl.classList.remove('unplaceable');
       return;
     }
-    cardEl.style.visibility = 'visible';
+    cardEl.hidden = false;
 
     const rows = piece.matrix.length;
     const cols = piece.matrix[0].length;
-    cardEl.style.gridTemplateColumns = `repeat(${cols}, auto)`;
-    cardEl.style.gridTemplateRows = `repeat(${rows}, auto)`;
+    const maxDim = Math.max(rows, cols);
+    const cellPx = maxDim >= 5 ? 11 : maxDim === 4 ? 12 : maxDim === 3 ? 14 : 16;
+
+    cardEl.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
+    cardEl.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
 
     const colorCss = COLORS[piece.color].css;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const cell = document.createElement('div');
         cell.className = 'mini-cell';
+        cell.style.width = `${cellPx}px`;
+        cell.style.height = `${cellPx}px`;
         if (piece.matrix[r][c]) {
           cell.classList.add('block-tile', colorCss);
           if (piece.gems && piece.gems[r]?.[c]) {
@@ -1406,6 +1443,7 @@ class BlockBlastGame {
     this.holdPiece = null;
     this.undoSnapshot = null;
     this.undoUsedThisTray = false;
+    this.hideFloatingProxy();
     this.cancelBombMode();
     this.cancelKeyboardPlacement();
 

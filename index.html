@@ -8,7 +8,7 @@
   <!-- iOS Web App / Home Screen Shortcut Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Block Blast+" />
   <meta name="theme-color" content="#0f172a" />
   <meta name="description" content="Block Blast+ Pro — Ad-free iPhone puzzle game with smart block deals, line-clear previews, hold vault, and tactical power-ups." />
@@ -161,7 +161,7 @@
         >
           <span class="power-icon" aria-hidden="true">↩️</span>
           <span class="power-name">Undo</span>
-          <span class="power-cost" id="undo-badge">Ready</span>
+          <span class="power-cost" id="undo-badge">Free</span>
         </button>
       </div>
     </section>
@@ -169,47 +169,46 @@
     <!-- Bottom Piece Dock + Hold Vault -->
     <section class="dock-stage" aria-label="Available block pieces and hold vault">
       <div class="piece-tray" id="piece-tray">
-        <div class="tray-slot" data-slot="0">
-          <div
-            class="piece-card drag-handle"
-            id="piece-slot-0"
-            data-slot="0"
-            tabindex="0"
-            aria-label="Tray piece 1. Drag onto board or press Enter then use Arrow keys and Enter to place."
-          ></div>
+        <div
+          class="tray-slot drag-handle"
+          id="tray-slot-0"
+          data-slot="0"
+          tabindex="0"
+          aria-label="Tray piece 1. Drag onto board or press Enter then use Arrow keys and Enter to place."
+        >
+          <div class="piece-card" id="piece-slot-0"></div>
         </div>
-        <div class="tray-slot" data-slot="1">
-          <div
-            class="piece-card drag-handle"
-            id="piece-slot-1"
-            data-slot="1"
-            tabindex="0"
-            aria-label="Tray piece 2. Drag onto board or press Enter then use Arrow keys and Enter to place."
-          ></div>
+        <div
+          class="tray-slot drag-handle"
+          id="tray-slot-1"
+          data-slot="1"
+          tabindex="0"
+          aria-label="Tray piece 2. Drag onto board or press Enter then use Arrow keys and Enter to place."
+        >
+          <div class="piece-card" id="piece-slot-1"></div>
         </div>
-        <div class="tray-slot" data-slot="2">
-          <div
-            class="piece-card drag-handle"
-            id="piece-slot-2"
-            data-slot="2"
-            tabindex="0"
-            aria-label="Tray piece 3. Drag onto board or press Enter then use Arrow keys and Enter to place."
-          ></div>
+        <div
+          class="tray-slot drag-handle"
+          id="tray-slot-2"
+          data-slot="2"
+          tabindex="0"
+          aria-label="Tray piece 3. Drag onto board or press Enter then use Arrow keys and Enter to place."
+        >
+          <div class="piece-card" id="piece-slot-2"></div>
         </div>
       </div>
 
       <!-- Hold Vault Slot (Unique Upgrade over standard Block Blast) -->
       <div class="hold-vault" id="hold-vault" aria-label="Hold Vault: Drag a piece here to save it for later">
         <div class="vault-header">HOLD</div>
-        <div class="vault-slot" id="vault-slot">
-          <div
-            class="piece-card drag-handle"
-            id="piece-slot-hold"
-            data-slot="hold"
-            tabindex="0"
-            aria-label="Held piece in vault. Drag onto board or press Enter then use Arrow keys to place."
-            hidden
-          ></div>
+        <div
+          class="vault-slot drag-handle"
+          id="tray-slot-hold"
+          data-slot="hold"
+          tabindex="0"
+          aria-label="Held piece in vault. Drag onto board or press Enter then use Arrow keys to place."
+        >
+          <div class="piece-card" id="piece-slot-hold" hidden></div>
           <span class="vault-placeholder" id="vault-placeholder">Drop to Save</span>
         </div>
       </div>
@@ -277,7 +276,7 @@
           <span class="step-num">1</span>
           <div>
             <strong>Open in Safari on your iPhone</strong>
-            <p>Access this game via your local network URL or hosted link in iOS Safari.</p>
+            <p>Access this game via your Netlify or GitHub Pages HTTPS link in iOS Safari.</p>
           </div>
         </li>
         <li>
@@ -300,7 +299,7 @@
         <h3>✨ Why Block Blast+ Pro is Better</h3>
         <ul>
           <li><strong>Zero Ads, Ever:</strong> Instant restarts, no 30-second video interruptions.</li>
-          <li><strong>Line-Clear Glow Preview:</strong> Rows & columns pulse gold <em>before</em> you drop a piece so you never misjudge a clear.</li>
+          <li><strong>Line-Clear Glow Preview:</strong> Rows & columns highlight gold <em>before</em> you drop a piece so you never misjudge a clear.</li>
           <li><strong>Smart Fair-Deal RNG:</strong> Checks board solvability so you aren't ended by impossible 3×3 deals.</li>
           <li><strong>Hold Vault & Tactical Power-Ups:</strong> Save a piece for later, rotate pieces, undo fat-finger drops, or blast a 3×3 zone.</li>
         </ul>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'block-blast-pro-v3';
+const CACHE_NAME = 'block-blast-pro-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -27,20 +27,22 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first when online (always fresh updates), Cache-fallback when offline!
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() =>
+        caches.match(event.request, { ignoreSearch: true }).then((cached) => {
+          return cached || caches.match('./index.html');
         })
-        .catch(() => cached || caches.match('./index.html'));
-      return cached || fetchPromise;
-    })
+      )
   );
 });
