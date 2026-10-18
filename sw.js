@@ -1,12 +1,12 @@
-const CACHE_NAME = 'block-blast-pro-v2';
+const CACHE_NAME = 'block-blast-pro-v3';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/game.js',
-  '/manifest.webmanifest',
-  '/icon-180.png',
-  '/icon-512.png'
+  './',
+  './index.html',
+  './styles.css',
+  './game.js',
+  './manifest.webmanifest',
+  './icon-180.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -39,7 +39,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => cached || caches.match('/index.html'));
+        .catch(() => cached || caches.match('./index.html'));
       return cached || fetchPromise;
     })
   );
